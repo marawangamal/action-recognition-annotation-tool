@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="e74ea153-dd5e-4f50-93d3-e4a74ba5c0fc" name="Default Changelist" comment="" />
+    <list default="true" id="e74ea153-dd5e-4f50-93d3-e4a74ba5c0fc" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/videos/.git_keep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gui/annotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/annotator.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -19,7 +23,6 @@
   <component name="PropertiesComponent">
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="WebServerToolWindowFactoryState" value="true" />
     <property name="WebServerToolWindowPanel.toolwindow.highlight.mappings" value="true" />
     <property name="WebServerToolWindowPanel.toolwindow.highlight.symlinks" value="true" />
@@ -35,6 +38,7 @@
   </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
       <recent name="$PROJECT_DIR$/datagen" />
     </key>
   </component>
@@ -50,7 +54,8 @@
       <workItem from="1627222192235" duration="16605000" />
       <workItem from="1638199625061" duration="5322000" />
       <workItem from="1638283237247" duration="570000" />
-      <workItem from="1639246120541" duration="183000" />
+      <workItem from="1639246120541" duration="6036000" />
+      <workItem from="1639257557696" duration="6216000" />
     </task>
     <servers />
   </component>

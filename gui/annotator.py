@@ -1,56 +1,65 @@
-from PyQt5.QtGui import QIcon, QFont, QPalette, QPainter, QPixmap, QPen
-from PyQt5.QtCore import QDir, Qt, QUrl, QSize
-from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
-from PyQt5.QtMultimediaWidgets import QVideoWidget, QGraphicsVideoItem
-from PyQt5.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
-        QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout,QWidget, QComboBox, QListWidget, QGraphicsScene, QGraphicsView, QGridLayout, QStatusBar)
-
 import os
+import sys
 import pandas as pd
 import os.path as osp
 import cv2
 import numpy as np
 
-TITLE_FONT = QFont('Arial', 14, QFont.Bold)
-SUBTITLE_FONT = QFont('Arial', 10)
-SUBTITLE_FONT.setItalic(True)
+from PyQt5 import QtGui
+from PyQt5.QtGui import QIcon, QFont, QPalette, QPainter, QPixmap, QPen
+from PyQt5.QtCore import QDir, Qt, QUrl, QSize
+from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+from PyQt5.QtMultimediaWidgets import QVideoWidget, QGraphicsVideoItem
+from PyQt5.QtWidgets import (QMainWindow, QApplication, QFileDialog, QHBoxLayout, QLabel,
+                             QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget, QComboBox, QListWidget,
+                             QGraphicsScene, QGraphicsView, QGridLayout, QStatusBar)
+
 
 class ActionAnnotator(QWidget):
-
+    """
+    Action recognition annotation gui for multi-person action recognition. Assumes tracking information is available.
+    """
     def __init__(self, classes_list, parent=None):
         super(ActionAnnotator, self).__init__(parent)
 
-        btnSize = QSize(16, 16)
+        self.classes_list = classes_list
 
+        # Default appearance attributes
+        self.button_size = QSize(16, 16)
+        self.title_font = QFont('Arial', 14, QFont.Bold)
+        self.subtitle_font = QFont('Arial', 10)
+        self.subtitle_font.setItalic(True)
+        self.playback_elapsed_string_format = '{} / {}  ||  {} / {}'
 
-        ########### Annotation Inputs
+        # Initialize video attributes
+        self.fps = None
+        self.current_video_name = None
+        self.current_video_path = None
+        self.root_dir = None  # path to data/ directory
+        self.videos_tracked_dir = None
+        self.annotations_dir = None
+        self.videos_list = None
+        self.num_frames = None
+        self.vid_height = None
+        self.vid_width = None
+        self.tracking_annotations = None  # df containing tracking annotations
 
-        # title
+        # Annotation Input Pane
         self.input_title = QLabel('New Annotation')
-        self.input_title.setFont(TITLE_FONT)
-
-
+        self.input_title.setFont(self.title_font)
         self.classes_label = QLabel('Class:')
-
-        # # dropdown input
-        # self.classes = QComboBox()
-        # self.classes.addItems(classes_list)
 
         # list select input
         self.classes_qlist = QListWidget()
-        self.classes_list = classes_list
         self.classes_qlist.addItems(classes_list)
         self.classes_qlist.setCurrentRow(0)
 
-        l1 = QHBoxLayout()
-        # l1.addWidget(self.classes_label)
+        l1 = QHBoxLayout()  # sub-layout
         l1.addWidget(self.classes_qlist)
-
 
         self.start_time_label = QLabel('Start:')
         self.stop_time_label = QLabel('Stop:')
         self.player_id_label = QLabel('Player id:')
-
 
         self.start_time = QLabel('XX:XX')
         self.stop_time = QLabel('XX:XX')
@@ -66,12 +75,10 @@ class ActionAnnotator(QWidget):
         self.annotations_add_btn.setEnabled(False)
         self.annotations_reset_btn.setEnabled(False)
 
-
         self.start_time_btn.clicked.connect(self.set_start_time)
         self.stop_time_btn.clicked.connect(self.set_stop_time)
         self.annotations_add_btn.clicked.connect(self.add_annotation)
         self.annotations_reset_btn.clicked.connect(self.reset_input)
-
 
         l2 = QHBoxLayout()
         l2.addWidget(self.start_time_label)
@@ -102,20 +109,17 @@ class ActionAnnotator(QWidget):
         input_layout.addLayout(l5)
         input_layout.addStretch(10)
 
-
-
-        ########### Navigation Pane
+        # Navigation Pane
         self.vid_index = 0
         self.annotations_index = 0
 
-        # title
+        # Title
         self.videos_title = QLabel('Videos List')
-        self.videos_title.setFont(TITLE_FONT)
+        self.videos_title.setFont(self.title_font)
         self.videos_qlist = QListWidget()
         self.videos_qlist.currentRowChanged.connect(self.set_video)
 
-
-        # buttons
+        # Buttons
         self.nav_next_btn = QPushButton('>')
         self.nav_prev_btn = QPushButton('<')
         self.nav_prev_btn.setEnabled(False)
@@ -124,11 +128,9 @@ class ActionAnnotator(QWidget):
         self.nav_prev_btn.clicked.connect(self.nav_prev)
 
         self.nav_openButton = QPushButton()
-        # self.nav_openButton.setFixedHeight(16)
-        self.nav_openButton.setIconSize(QSize(16, 16))
+        self.nav_openButton.setIconSize(self.button_size)
         self.nav_openButton.setIcon(self.style().standardIcon(QStyle.SP_DirOpenIcon))
         self.nav_openButton.clicked.connect(self.set_dirs)
-
 
         nav_layout = QVBoxLayout()
         nav_btn_layout = QHBoxLayout()
@@ -141,13 +143,11 @@ class ActionAnnotator(QWidget):
         nav_layout.addLayout(nav_btn_layout)
         nav_layout.addWidget(self.videos_qlist)
 
-
-        ########### Annotations Pane
+        # Annotations Pane
         self.annotations_title = QLabel('Annotations')
-        self.annotations_title.setFont(TITLE_FONT)
+        self.annotations_title.setFont(self.title_font)
         self.annotations_subtitle = QLabel('action, player_id, start_time, stop_time')
-        self.annotations_subtitle.setFont(SUBTITLE_FONT)
-
+        self.annotations_subtitle.setFont(self.subtitle_font)
 
         self.annotations_qlist = QListWidget()
         self.annotations_qlist.itemClicked.connect(self.seek_video_to_annotation)
@@ -162,66 +162,64 @@ class ActionAnnotator(QWidget):
         annotations_layout.addWidget(self.annotations_qlist)
         annotations_layout.addWidget(self.delete_annotation_btn)
 
-        # nav_layout.addWidget(self.annotations_title)
-        # nav_layout.addWidget(self.annotations_qlist)
-        # nav_layout.addWidget(self.delete_annotation_btn)
+        # VideoPlayer
+        self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        self.video_widget = QVideoWidget(aspectRatioMode=1)
 
+        self.time_elapsed = QLabel('{:02d}:{:02d} / {:02d}:{:02d}  ||  {}  /  {}'.format(0, 0, 0, 0, 0, 0))
 
-        ############ VideoPlayer
-        self.mediaPlayer = QMediaPlayer(None, QMediaPlayer.VideoSurface)
-        self.videoWidget = QVideoWidget(aspectRatioMode=1)
-
-        self.time_elapsed = QLabel('{:02d}:{:02d} / {:02d}:{:02d}  ||  {}  /  {}'.format(0,0,0,0, 0,0))
-
-        self.playButton = QPushButton()
-        self.playButton.setEnabled(False)
-        self.playButton.setFixedHeight(24)
-        self.playButton.setIconSize(btnSize)
-        self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-        self.playButton.clicked.connect(self.play)
+        self.play_button = QPushButton()
+        self.play_button.setEnabled(False)
+        self.play_button.setFixedHeight(24)
+        self.play_button.setIconSize(self.button_size)
+        self.play_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.play_button.clicked.connect(self.play)
 
         # frame control
-        self.playbackspeed_forward_btn = QPushButton('>');  
+        self.playbackspeed_forward_btn = QPushButton('>')
         self.playbackspeed_backward_btn = QPushButton('<')
+        self.playbackspeed_forward_5x_btn = QPushButton('>>')
+        self.playbackspeed_backward_5x_btn = QPushButton('<<')
         self.playbackspeed_forward_btn.setEnabled(False)
         self.playbackspeed_backward_btn.setEnabled(False)
+        self.playbackspeed_forward_5x_btn.setEnabled(False)
+        self.playbackspeed_backward_5x_btn.setEnabled(False)
 
         self.playbackspeed_forward_btn.clicked.connect(self.next_frame)
         self.playbackspeed_backward_btn.clicked.connect(self.prev_frame)
+        self.playbackspeed_forward_5x_btn.clicked.connect(self.nnext_frame)
+        self.playbackspeed_backward_5x_btn.clicked.connect(self.pprev_frame)
 
-        self.positionSlider = QSlider(Qt.Horizontal)
-        self.positionSlider.setRange(0, 0)
-        self.positionSlider.sliderMoved.connect(self.setPosition)
+        self.position_slider = QSlider(Qt.Horizontal)
+        self.position_slider.setRange(0, 0)
+        self.position_slider.sliderMoved.connect(self.set_position)
 
-        self.statusBar = QStatusBar()
-        # self.statusBar.setFont(QFont("Noto Sans", 10))
-        self.statusBar.setFont(QFont("Arial", 10))
-        self.statusBar.setFixedHeight(14)
+        self.status_bar = QStatusBar()
+        self.status_bar.setFont(self.subtitle_font)
+        self.status_bar.setFixedHeight(14)
 
-        controlLayout = QHBoxLayout()
-        controlLayout.setContentsMargins(0, 0, 0, 0)
-        # controlLayout.addWidget(openButton)
-        controlLayout.addWidget(self.playButton)
-        controlLayout.addWidget(self.time_elapsed)
-        controlLayout.addWidget(self.positionSlider)
-        
-        playbackLayout = QHBoxLayout()
-        playbackLayout.addWidget(self.playbackspeed_backward_btn)
-        playbackLayout.addWidget(self.playbackspeed_forward_btn)
-        # playbackLayout.addWidget(self.frames_elapsed)
-    
+        control_layout = QHBoxLayout()
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        control_layout.addWidget(self.play_button)
+        control_layout.addWidget(self.time_elapsed)
+        control_layout.addWidget(self.position_slider)
 
-        controlAndPlaybackLayout = QVBoxLayout()
-        controlAndPlaybackLayout.addLayout(playbackLayout)
-        controlAndPlaybackLayout.addLayout(controlLayout)
+        playback_layout = QHBoxLayout()
+        playback_layout.addWidget(self.playbackspeed_backward_5x_btn)
+        playback_layout.addWidget(self.playbackspeed_backward_btn)
+        playback_layout.addWidget(self.playbackspeed_forward_btn)
+        playback_layout.addWidget(self.playbackspeed_forward_5x_btn)
+
+        control_and_playback_layout = QVBoxLayout()
+        control_and_playback_layout.addLayout(playback_layout)
+        control_and_playback_layout.addLayout(control_layout)
 
         video_layout = QVBoxLayout()
-        video_layout.addWidget(self.videoWidget)
-        video_layout.addLayout(controlAndPlaybackLayout)
-        video_layout.addWidget(self.statusBar)
+        video_layout.addWidget(self.video_widget)
+        video_layout.addLayout(control_and_playback_layout)
+        video_layout.addWidget(self.status_bar)
 
-        #### Global Layout
-
+        # Global Layout
         annotations_pane_layout = QVBoxLayout()
         annotations_pane_layout.addLayout(input_layout, 0)
         annotations_pane_layout.addLayout(annotations_layout, 5)
@@ -229,31 +227,21 @@ class ActionAnnotator(QWidget):
         global_layout = QHBoxLayout()
         global_layout.addLayout(nav_layout)
         global_layout.addLayout(annotations_pane_layout)
-        global_layout.addLayout(video_layout, 10) # 5x stretch factor
-
+        global_layout.addLayout(video_layout, 10)  # 10x stretch factor
 
         self.setLayout(global_layout)
         self.init_media_player()
 
-
-
-    def init_media_player(self):
-        self.mediaPlayer.setVideoOutput(self.videoWidget)
-        self.mediaPlayer.stateChanged.connect(self.mediaStateChanged)
-        self.mediaPlayer.positionChanged.connect(self.positionChanged)
-        self.mediaPlayer.durationChanged.connect(self.durationChanged)
-        self.mediaPlayer.error.connect(self.handleError)
-        self.statusBar.showMessage("Ready")
-
     def mousePressEvent(self, QMouseEvent):
-        if not (self.mediaPlayer.isVideoAvailable()):
+        """ Callback that sets `player_id` when a video is playing and click is within video player """
+        if not (self.media_player.isVideoAvailable()):
             return
         self.x, self.y = QMouseEvent.x(), QMouseEvent.y()
-        self.frame_geometry = self.videoWidget.frameGeometry().getCoords() #[x1, y1, x2, y2]
-
+        self.frame_geometry = self.video_widget.frameGeometry().getCoords()  # [x1, y1, x2, y2]
 
         # check if click is within video
-        if(self.frame_geometry[0] < self.x < self.frame_geometry[2] and self.frame_geometry[1] < self.y  < self.frame_geometry[2]):
+        if (self.frame_geometry[0] < self.x < self.frame_geometry[2] and
+                self.frame_geometry[1] < self.y < self.frame_geometry[2]):
 
             # turn on reset
             self.annotations_reset_btn.setEnabled(True)
@@ -262,243 +250,213 @@ class ActionAnnotator(QWidget):
             x = (self.x - self.frame_geometry[0]) / (self.frame_geometry[2] - self.frame_geometry[0])
             y = (self.y - self.frame_geometry[1]) / (self.frame_geometry[3] - self.frame_geometry[1])
 
-
-            player_id = self.get_player_id((x,y))
+            player_id = self.get_player_id((x, y))
             self.player_id.setText("{}".format(player_id))
 
-            # self.player_id.setText("({}, {})".format(x, y))
-            print("video_geometry: ", self.frame_geometry)
-            print("(x, y): ({}, {}), ".format(x, y))
-            print("status: ", self.mediaPlayer.isVideoAvailable())
-            print("")
-            #
+            # For debugging
+            # print("video_geometry: ", self.frame_geometry)
+            # print("(x, y): ({}, {}), ".format(x, y))
+            # print("status: ", self.media_player.isVideoAvailable())
+            # print("")
+
             self.update_add_btn_status()
 
-    def update_add_btn_status(self):
+    def keyPressEvent(self, key_id):
+        """ Callback controlling video playback """
+        if key_id.key() == Qt.Key_Right:
+            self.media_player.setPosition(self.media_player.position() + 500)
 
-        if (self.start_time.text() <= self.stop_time.text() and self.start_time.text() != "XX:XX"
-        and self.stop_time.text() != "XX:XX"
-         and self.player_id.text() != 'XX'):
+        elif key_id.key() == Qt.Key_Left:
+            self.media_player.setPosition(self.media_player.position() - 500)
+
+        elif key_id.key() == Qt.Key_Enter or key_id.key() == Qt.Key_Return or key_id.key() == Qt.Key_Space:
+            self.play()
+
+    def set_position(self, position):
+        """ Sets video playback position """
+        self.media_player.setPosition(position)
+
+    def handle_error(self):
+        """ Prints error to status bar at bottom of gui """
+        self.play_button.setEnabled(False)
+        self.status_bar.showMessage("Error: " + self.media_player.errorString())
+
+    def init_media_player(self):
+        """ Initializes media player widget """
+        self.media_player.setVideoOutput(self.video_widget)
+        self.media_player.stateChanged.connect(self.media_state_changed)
+        self.media_player.positionChanged.connect(self.position_changed)
+        self.media_player.durationChanged.connect(self.duration_changed)
+        self.media_player.error.connect(self.handle_error)
+        self.status_bar.showMessage("Ready")
+
+    def update_add_btn_status(self):
+        """ Activates/Deactivates add button"""
+
+        if (self.start_time.text() <= self.stop_time.text() != "XX:XX" and self.start_time.text() != "XX:XX"
+                and self.player_id.text() != 'XX'):
             self.annotations_add_btn.setEnabled(True)
         else:
             self.annotations_add_btn.setEnabled(False)
 
-
     def get_player_id(self, coords):
-        x,y = coords #ints
+        """ Gets player tracking id from corresponding tracking .txt file """
+        x, y = coords  # ints
 
-        curr_frame = int((self.mediaPlayer.position()/1000)*self.fps) # miliseconds
+        curr_frame = int((self.media_player.position() / 1000) * self.fps)  # milliseconds
         for row in self.tracking_annotations:
-            frame_num, player_id, x1, y1, w, h = row[:6] #int, int, floats
+            frame_num, player_id, x1, y1, w, h = row[:6]  # int, int, floats
 
-            if (int(frame_num) == curr_frame):
+            if int(frame_num) == curr_frame:
                 point_coords = [x, y]
-                box_coords = np.array([x1, y1, x1+w, y1+h]) / np.array([self.vid_width, self.vid_height, self.vid_width, self.vid_height])
+                box_coords = np.array([x1, y1, x1 + w, y1 + h]) / np.array(
+                    [self.vid_width, self.vid_height, self.vid_width, self.vid_height])
 
-                if self.isIn(point_coords, box_coords):
-                    print("frame_num, player_id, box_coords, point_coords")
-                    print(frame_num, player_id, box_coords, point_coords)
+                if box_coords[0] < point_coords[0] < box_coords[2] and box_coords[1] < point_coords[1] < box_coords[3]:
+                    # print("frame_num, player_id, box_coords, point_coords")
+                    # print(frame_num, player_id, box_coords, point_coords)
                     return int(player_id)
 
         return -1
 
-    def isIn(self, point_coords, box_coords):
-        """ checks if point (x, y) falls in box (x1, y1, x2, y2) """
-
-        if (box_coords[0] < point_coords[0] and point_coords[0] < box_coords[2] and
-            box_coords[1] < point_coords[1] and point_coords[1] < box_coords[3]):
-            return True
-        else:
-            return False
-
-
-
     def reset_input(self):
-        """ reset input after an annotation is added to avoid confusing events
-        """
+        """ Reset annotations pane after an annotation is added """
         self.start_time.setText('XX:XX')
         self.stop_time.setText('XX:XX')
         self.player_id.setText('XX')
         self.update_add_btn_status()
         self.annotations_reset_btn.setEnabled(False)
 
-    def keyPressEvent(self, e):
-        # print(e.key())
-        if e.key() == Qt.Key_Right:
-            # print("right")
-            self.mediaPlayer.setPosition(self.mediaPlayer.position() + 500)
-
-        elif e.key() == Qt.Key_Left:
-            # print("left")
-            self.mediaPlayer.setPosition(self.mediaPlayer.position() - 500)
-
-        elif e.key() == Qt.Key_Enter or e.key() == Qt.Key_Return:
-            self.play()
-
     def nav_next(self):
+        """ Callback for next video file navigation button """
         self.videos_qlist.setCurrentRow(self.videos_qlist.currentRow() + 1)
         self.set_video()
 
     def nav_prev(self):
+        """ Callback for previous video file navigation button """
         self.videos_qlist.setCurrentRow(self.videos_qlist.currentRow() - 1)
         self.set_video()
 
     def update_nav_clickers(self):
-        if(self.videos_qlist.currentRow() == 0):
+        """ Controls navigation button activation status """
+        if self.videos_qlist.currentRow() == 0:
             self.nav_prev_btn.setEnabled(False)
         else:
             self.nav_prev_btn.setEnabled(True)
 
-        if(self.videos_qlist.currentRow() == self.videos_qlist.count() - 1):
+        if self.videos_qlist.currentRow() == self.videos_qlist.count() - 1:
             self.nav_next_btn.setEnabled(False)
         else:
             self.nav_next_btn.setEnabled(True)
 
     def set_start_time(self):
-        pos = self.mediaPlayer.position() # miliseconds
-        self.start_time.setText(self.format_video_time(pos))
+        """ Sets start time of action being annotated """
+        pos = self.media_player.position()  # milliseconds
+        self.start_time.setText(self.get_time_string(pos))
         self.update_add_btn_status()
         self.annotations_reset_btn.setEnabled(True)
 
     def set_stop_time(self):
-        pos = self.mediaPlayer.position() # miliseconds
-        self.stop_time.setText(self.format_video_time(pos))
+        """ Sets stop time of action being annotated """
+        pos = self.media_player.position()  # milliseconds
+        self.stop_time.setText(self.get_time_string(pos))
         self.update_add_btn_status()
         self.annotations_reset_btn.setEnabled(True)
 
-    def format_video_time(self, time_ms):
-        """ converts time_ms (int) to mm:ss (string)
-        """
-
-        # mins:secs
-        time_seconds = int(time_ms/1000)
-        mins = int(time_seconds / 60)
-        secs = time_seconds - mins*60
-
-        return "{:02d}:{:02d}".format(mins, secs)
-
-    def time_string_to_int(self, time_string):
-        """ converts "{:02d}:{:02d}" (string) to time in seconds (int)
-        """
-        time_lst = [int(x) for x in time_string.split(":")]
-        bases = [60, 1]
-        return sum([time_lst[i]*bases[i] for i in range(len(time_lst)) ])
-
     def set_dirs(self):
-        """ sets video and annotation directories
-        """
+        """ Sets `videos_tracked` and `annotation` directories """
+
         # open select folder dialog
         self.videos_qlist.clear()
         self.annotations_qlist.clear()
-        self.mediaPlayer.stop()
+        self.media_player.stop()
 
         # turn off nav clickers
         self.nav_prev_btn.setEnabled(False)
         self.nav_next_btn.setEnabled(False)
 
-
         # load from user selection
-        self.root_dir = QFileDialog.getExistingDirectory(self, 'Select root directory containing videos/ and annoations/')
-        self.videos_dir = osp.join(self.root_dir, 'videos')
+        self.root_dir = QFileDialog.getExistingDirectory(self,
+                                                         'Select root directory containing videos/ and annoations/')
         self.videos_tracked_dir = osp.join(self.root_dir, 'videos_tracked')
         self.annotations_dir = osp.join(self.root_dir, 'annotations')
 
-        if(not (osp.exists(self.videos_dir) and osp.exists(self.annotations_dir))):
-            self.statusBar.showMessage("ERROR: invalid directory chosen")
+        if not (osp.exists(self.videos_tracked_dir) and osp.exists(self.annotations_dir)):
+            self.status_bar.showMessage("ERROR: invalid directory chosen")
         else:
             # select first video and annotation
             self.videos_list = os.listdir(self.videos_tracked_dir)
-            # [self.videos_list.remove(p) for p in self.videos_list if '.mp4' not in p]
-
-
             self.videos_list = [item for item in self.videos_list if '.' not in item]
-            print("vids list")
-            print(self.videos_list)
-
-
-
 
             self.videos_qlist.addItems(self.videos_list)
             self.videos_qlist.setCurrentRow(0)
 
             self.set_video()
-
-            # video
-            # self.mediaPlayer.setMedia(
-            #         QMediaContent(QUrl.fromLocalFile(os.path.join(self.videos_dir, self.current_video_name))))
-
-            # # tracked video
-            # self.mediaPlayer.setMedia(
-            #         QMediaContent(QUrl.fromLocalFile(os.path.join(self.videos_tracked_dir, self.current_video_name.split('.')[0], self.current_video_name))))
-            # self.playButton.setEnabled(True)
             self.update_nav_clickers()
 
             self.start_time_btn.setEnabled(True)
             self.stop_time_btn.setEnabled(True)
             self.delete_annotation_btn.setEnabled(True)
 
-            # self.play()
-
-            # load annoation .csv if it exists
-            if(osp.exists(osp.join(self.annotations_dir, self.current_video_name))):
-                self.set_annotations()
-
     def set_video(self):
-        """ updates variables when new video is selected. Also updates and displays and its corresponding annotation file
-        """
+        """Updates variables when new video is selected. Also updates and displays and its corresponding annot. file"""
 
         # update video
         self.current_video_name = self.videos_list[self.videos_qlist.currentRow()] + '.mp4'
-        self.current_video_path = osp.join(self.videos_tracked_dir, self.current_video_name.split('.')[0], self.current_video_name)
+        self.current_video_path = osp.join(self.videos_tracked_dir, self.current_video_name.split('.')[0],
+                                           self.current_video_name)
         cap_vid_tracked = cv2.VideoCapture(self.current_video_path)
         self.fps = cap_vid_tracked.get(cv2.CAP_PROP_FPS)
         self.num_frames = int(cap_vid_tracked.get(cv2.CAP_PROP_FRAME_COUNT))
         self.vid_height = cap_vid_tracked.get(cv2.CAP_PROP_FRAME_HEIGHT)
         self.vid_width = cap_vid_tracked.get(cv2.CAP_PROP_FRAME_WIDTH)
 
-
         # read tracking data for this video (for efficiency change to json/dict)
-        tracking_results_txt_path = osp.join(self.videos_tracked_dir, self.current_video_name.split('.')[0], self.current_video_name.split('.')[0] + '.txt')
+        tracking_results_txt_path = osp.join(self.videos_tracked_dir, self.current_video_name.split('.')[0],
+                                             self.current_video_name.split('.')[0] + '.txt')
         df = pd.read_csv(tracking_results_txt_path)
         self.tracking_annotations = pd.Series.to_list(df)
 
         self.annotations_qlist.clear()
-        if(osp.exists(osp.join(self.annotations_dir, self.current_video_name.split('.')[0] + '.csv'))):
+        if osp.exists(osp.join(self.annotations_dir, self.current_video_name.split('.')[0] + '.csv')):
             df = pd.read_csv(osp.join(self.annotations_dir, self.current_video_name.split('.')[0] + '.csv'))
             self.annotations_list = pd.Series.to_list(df)
-            annot_strs = [' '.join([str(elem) + ", " for elem in row[1:-3] ])[:-2]
-            for row in self.annotations_list]
-            self.annotations_qlist.addItems(annot_strs)
+            annotation_strings = [' '.join([str(elem) + ", " for elem in row[1:-3]])[:-2]
+                                  for row in self.annotations_list]
+            self.annotations_qlist.addItems(annotation_strings)
             self.annotations_qlist.setCurrentRow(0)
             self.annotations_col_names = df.columns
 
         else:
-            self.annotations_col_names = ['vidname', 'action', 'player_id', 'start_t', 'stop_t', 'frame_coords', 'x_raw', 'y_raw']
+            self.annotations_col_names = ['vidname', 'action', 'player_id', 'start_t', 'stop_t', 'frame_coords',
+                                          'x_raw', 'y_raw']
             self.annotations_list = []
 
-        self.mediaPlayer.setMedia(
-                QMediaContent(QUrl.fromLocalFile(self.current_video_path)))
-        self.playButton.setEnabled(True)
-        self.statusBar.showMessage(osp.join(self.current_video_path))
+        self.media_player.setMedia(
+            QMediaContent(QUrl.fromLocalFile(self.current_video_path)))
+        self.play_button.setEnabled(True)
+        self.status_bar.showMessage(osp.join(self.current_video_path))
         self.update_nav_clickers()
         self.playbackspeed_forward_btn.setEnabled(True)
         self.playbackspeed_backward_btn.setEnabled(True)
+        self.playbackspeed_forward_5x_btn.setEnabled(True)
+        self.playbackspeed_backward_5x_btn.setEnabled(True)
         self.play()
 
     def add_annotation(self):
-        """ adds a new annotation, and saves to disk
-        """
+        """ Adds new annotation to list and saves to disk """
 
         # log to csv
-        start_t = self.time_string_to_int(self.start_time.text()) # seconds
-        stop_t = self.time_string_to_int(self.stop_time.text())
+        start_t = self.get_time_seconds(self.start_time.text())  # seconds
+        stop_t = self.get_time_seconds(self.stop_time.text())
         player_id = int(self.player_id.text())
         vidname = self.current_video_name
         frame_coords = self.frame_geometry
         action = self.classes_list[self.classes_qlist.currentRow()]
         self.annotations_list.append([vidname, action, player_id, start_t, stop_t, frame_coords, self.x, self.y])
 
-        df = pd.DataFrame(self.annotations_list,  columns=self.annotations_col_names)
+        # save to disk
+        df = pd.DataFrame(self.annotations_list, columns=self.annotations_col_names)
         df.to_csv(osp.join(self.annotations_dir, self.current_video_name.split('.')[0] + ".csv"), index=False)
 
         # display
@@ -509,91 +467,118 @@ class ActionAnnotator(QWidget):
         self.reset_input()
 
     def delete_annotation(self):
+        """ Deletes an annotation and saves to disk """
+
+        # remove annotation
         index = self.annotations_qlist.currentRow()
         self.annotations_qlist.takeItem(index)
         self.annotations_list.pop(index)
 
+        # save to disk
         df = pd.DataFrame(self.annotations_list, columns=self.annotations_col_names)
         df.to_csv(osp.join(self.annotations_dir, self.current_video_name.split('.')[0] + ".csv"), index=False)
 
     def seek_video_to_annotation(self):
+        """ Seeks video to selected annotation """
         idx = self.annotations_qlist.currentRow()
-        vidname, action, player_id, start_t, stop_t, frame_coords, _, _  = self.annotations_list[idx]
-        self.setPosition(start_t*1000) # converting to ms
-
+        vidname, action, player_id, start_t, stop_t, frame_coords, _, _ = self.annotations_list[idx]
+        self.set_position(start_t * 1000)  # converting to ms
 
     def next_frame(self):
-        # curr_frame = int((self.mediaPlayer.position()/1000)*self.fps) # miliseconds -> seconds -> frame
-        next_pos = self.mediaPlayer.position() + (1/self.fps)*1000 
-        self.mediaPlayer.setPosition(next_pos)
+        """ Callback for next frame button """
+        # curr_frame = int((self.mediaPlayer.position()/1000)*self.fps) #  miliseconds -> seconds -> frame
+        next_pos = self.media_player.position() + (1 / self.fps) * 1000
+        self.media_player.setPosition(next_pos)
+
+    def nnext_frame(self):
+        """ Callback for next frame button """
+        # curr_frame = int((self.mediaPlayer.position()/1000)*self.fps) #  miliseconds -> seconds -> frame
+        next_pos = self.media_player.position() + (5 / self.fps) * 1000
+        self.media_player.setPosition(next_pos)
 
     def prev_frame(self):
-        prev_pos = self.mediaPlayer.position() - (1/self.fps)*1000
-        self.mediaPlayer.setPosition(prev_pos)
+        """ Callback for previous frame button """
+        prev_pos = self.media_player.position() - (1 / self.fps) * 1000
+        self.media_player.setPosition(prev_pos)
 
-    def abrir(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Selecciona los mediose",
-                ".", "Video Files (*.mp4 *.flv *.ts *.mts *.avi)")
-
-        if fileName != '':
-            self.mediaPlayer.setMedia(
-                    QMediaContent(QUrl.fromLocalFile(fileName)))
-            self.playButton.setEnabled(True)
-            self.statusBar.showMessage(fileName)
-            self.play()
+    def pprev_frame(self):
+        """ Callback for previous frame button """
+        prev_pos = self.media_player.position() - (5 / self.fps) * 1000
+        self.media_player.setPosition(prev_pos)
 
     def play(self):
-        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
-            self.mediaPlayer.pause()
+        """ Toggles video playback """
+        if self.media_player.state() == QMediaPlayer.PlayingState:
+            self.media_player.pause()
         else:
-            self.mediaPlayer.play()
+            self.media_player.play()
 
-    def mediaStateChanged(self, state):
-        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
-            self.playButton.setIcon(
-                    self.style().standardIcon(QStyle.SP_MediaPause))
+    def media_state_changed(self):
+        """ Toggles appearance of play/pause button"""
+        if self.media_player.state() == QMediaPlayer.PlayingState:
+            self.play_button.setIcon(
+                self.style().standardIcon(QStyle.SP_MediaPause))
         else:
-            self.playButton.setIcon(
-                    self.style().standardIcon(QStyle.SP_MediaPlay))
+            self.play_button.setIcon(
+                self.style().standardIcon(QStyle.SP_MediaPlay))
 
-    def positionChanged(self, position):
-        self.positionSlider.setValue(position)
-        duration = self.format_video_time(self.mediaPlayer.duration())
-        curr = self.format_video_time(self.mediaPlayer.position())
-        frame_num = int(self.fps* self.mediaPlayer.position()/1000)
-        self.time_elapsed.setText('{}  /  {}  ||  {}  /  {}'.format(curr, duration, frame_num, self.num_frames))
+    def position_changed(self, position):
+        """ Updates playback time and frame number information """
+        self.position_slider.setValue(position)
+        duration = self.get_time_string(self.media_player.duration())
+        curr = self.get_time_string(self.media_player.position())
+        frame_num = int(self.fps * self.media_player.position() / 1000)
+        self.time_elapsed.setText(
+            self.playback_elapsed_string_format.format(curr, duration, frame_num, self.num_frames))
 
-
-
-    def durationChanged(self, duration):
-        self.positionSlider.setRange(0, duration)
-        duration = self.format_video_time(self.mediaPlayer.duration())
-        curr = self.format_video_time(self.mediaPlayer.position())
-        frame_num = int(self.fps* self.mediaPlayer.position()/1000)
+    def duration_changed(self, duration):
+        self.position_slider.setRange(0, duration)
+        duration = self.get_time_string(self.media_player.duration())
+        curr = self.get_time_string(self.media_player.position())
+        frame_num = int(self.fps * self.media_player.position() / 1000)
         # self.time_elapsed.setText('{} / {}'.format(curr, duration))
-        self.time_elapsed.setText('{}  /  {}  ||  {}  /  {}'.format(curr, duration, frame_num, self.num_frames))
+        self.time_elapsed.setText(
+            self.playback_elapsed_string_format.format(curr, duration, frame_num, self.num_frames))
 
+    @staticmethod
+    def get_time_string(time_ms):
+        """ converts `time_ms` (int) to mm:ss (string) format """
 
-    def setPosition(self, position):
-        self.mediaPlayer.setPosition(position)
+        # minutes:seconds
+        time_seconds = int(time_ms / 1000)
+        mins = int(time_seconds / 60)
+        secs = time_seconds - mins * 60
 
-    def handleError(self):
-        self.playButton.setEnabled(False)
-        self.statusBar.showMessage("Error: " + self.mediaPlayer.errorString())
+        return "{:02d}:{:02d}".format(mins, secs)
 
+    @staticmethod
+    def get_time_seconds(time_string):
+        """ converts "{:02d}:{:02d}" (string) to time in seconds (int) """
+        time_lst = [int(x) for x in time_string.split(":")]
+        bases = [60, 1]
+        return sum([time_lst[i] * bases[i] for i in range(len(time_lst))])
 
 
 if __name__ == '__main__':
-    import sys
     app = QApplication(sys.argv)
+
+    # Action classes
     classes_list = ['shot', 'pass', 'advance', 'faceoff', 'forwards', 'backwards']
 
+    main_window = QMainWindow()
 
-    player = ActionAnnotator(classes_list)
-    player.setWindowTitle("Action Annotation")
-    player.resize(1200, 500)
-    player.show()
+    annotator_widget = ActionAnnotator(classes_list)
+    annotator_widget.setWindowTitle("Action Annotation")
+    annotator_widget.setWindowIcon(QtGui.QIcon('icon.png'))
 
+    # Get screen geometry
+    screen = app.primaryScreen()
+    size = screen.size()
+    width, height = size.width(), size.height()
 
+    # Set gui size
+    main_window.setCentralWidget(annotator_widget)
+    main_window.resize(width, height)  # 1200, 500
+    main_window.show()
 
     sys.exit(app.exec_())
