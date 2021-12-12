@@ -20,8 +20,20 @@ This repo contains source code for a multi-person action recognition annotation 
 4. Click the add button (4) to save the annotation.
 5. Exit at anytime, your work is saved every time you add a new annotation.
 
+
 <table style="width:85%">
   <tr>
   <img src="https://github.com/marawangamal/action-recognition-annotation-tool/blob/main/docs/labelled_img.png?raw=true" alt="Paris" class="center">
   </tr>
 </table>
+
+Each annotation appends a row containing the following attributes:
+
+* video name
+* action class
+* player tracking id
+* start time (seconds)
+* stop time (seconds)
+* video player coordinates (x1, y1, x2, y2) 
+* mouse click x coordinate
+* mouse click y coordinate
