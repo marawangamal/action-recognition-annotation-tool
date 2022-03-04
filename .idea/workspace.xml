@@ -3,6 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="e74ea153-dd5e-4f50-93d3-e4a74ba5c0fc" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gui/annotator.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/annotator.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -11,6 +12,14 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitSEFilterConfiguration">
+    <file-type-list>
+      <filtered-out-file-type name="LOCAL_BRANCH" />
+      <filtered-out-file-type name="REMOTE_BRANCH" />
+      <filtered-out-file-type name="TAG" />
+      <filtered-out-file-type name="COMMIT_BY_MESSAGE" />
+    </file-type-list>
   </component>
   <component name="ProjectId" id="1vVdqIjLz5Po1IwwcnBwhmqlKHe" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
@@ -53,7 +62,9 @@
       <workItem from="1638199625061" duration="5322000" />
       <workItem from="1638283237247" duration="570000" />
       <workItem from="1639246120541" duration="6036000" />
-      <workItem from="1639257557696" duration="12282000" />
+      <workItem from="1639257557696" duration="12337000" />
+      <workItem from="1646417488778" duration="21000" />
+      <workItem from="1646417512074" duration="5610000" />
     </task>
     <servers />
   </component>
